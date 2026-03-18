@@ -6,22 +6,73 @@
   <title>RULETA PROFES MUAMED</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
   <style>
-    canvas { background:#ffffff; border-radius:50%; }
+    :root{color-scheme: light;}
+
+    body{
+      background:#f3e8ff !important;
+      color:#1f2937 !important;
+    }
+
+    canvas{
+      background:#ffffff;
+      border-radius:50%;
+      box-shadow:0 0 40px rgba(255,215,0,0.6), inset 0 0 20px rgba(0,0,0,0.2);
+    }
+
+    h1,h2{ color:#6b21a8 !important; }
+
+    /* 🎬 Pantalla gigante ganador */
+    #winnerOverlay{
+      position:fixed;
+      inset:0;
+      background:radial-gradient(circle,#6b21a8,#2e1065);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      flex-direction:column;
+      z-index:9999;
+      color:white;
+      text-align:center;
+      animation:fadeIn .6s ease;
+    }
+
+    #winnerOverlay h1{
+      font-size:clamp(3rem,8vw,8rem);
+      font-weight:900;
+      text-shadow:0 0 25px gold,0 0 60px white;
+      animation:zoomWinner 1s ease;
+    }
+
+    @keyframes zoomWinner{
+      from{transform:scale(.3);opacity:0}
+      to{transform:scale(1);opacity:1}
+    }
+
+    @keyframes fadeIn{
+      from{opacity:0}
+      to{opacity:1}
+    }
   </style>
 </head>
-<body id="body" class="bg-gradient-to-br from-purple-700 via-purple-600 to-white min-h-screen text-gray-800 transition-all">
 
-<!-- ENCABEZADO -->
+<body id="body" class="bg-gradient-to-br from-purple-700 via-purple-600 to-white min-h-screen text-gray-800">
+
+<!-- 🎬 Overlay ganador gigante -->
+<div id="winnerOverlay" onclick="hideWinnerOverlay()">
+  <div class="text-3xl mb-6">🏆 EL GANADOR ES 🏆</div>
+  <h1 id="winnerBig"></h1>
+  <div class="mt-8 text-lg opacity-80">(Click para continuar)</div>
+</div>
+
 <div class="text-center pt-6">
-  <!-- IMPORTANTE: usa archivo local logo.png si el navegador bloquea base64 -->
   <img src="logo.png" onerror="this.style.display='none'" class="mx-auto w-40 mb-3" />
   <h1 class="text-4xl font-extrabold text-purple-800">🎡 RULETA PROFES MUAMED</h1>
 </div>
 
 <div class="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-  <!-- RUEDA -->
   <div class="lg:col-span-2 bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center">
     <canvas id="wheel" width="450" height="450"></canvas>
 
@@ -29,7 +80,6 @@
       <button id="spinBtn" class="px-6 py-3 bg-purple-700 text-white rounded-xl text-lg hover:bg-purple-800">Girar Ruleta</button>
       <button id="resetBtn" class="px-4 py-3 bg-gray-600 text-white rounded-xl">Reiniciar Histórico</button>
       <button id="fullscreenBtn" class="px-4 py-3 bg-purple-500 text-white rounded-xl">Pantalla Completa</button>
-      <button id="themeBtn" class="px-4 py-3 bg-white border border-purple-700 text-purple-700 rounded-xl">Cambiar Tema</button>
     </div>
 
     <label class="mt-4 flex items-center gap-2">
@@ -39,7 +89,6 @@
     <h2 id="winner" class="text-2xl font-semibold mt-4 text-purple-800"></h2>
   </div>
 
-  <!-- PANEL -->
   <div class="bg-white rounded-2xl shadow-xl p-6 flex flex-col gap-6">
 
     <div>
@@ -48,19 +97,8 @@
     </div>
 
     <div>
-      <h2 class="text-xl font-bold mb-2 text-purple-700">📊 Estadísticas</h2>
-      <ul id="stats" class="text-sm"></ul>
-    </div>
-
-    <div>
       <h2 class="text-xl font-bold mb-2 text-purple-700">📝 Notas</h2>
       <textarea id="notes" class="w-full h-32 border rounded p-2"></textarea>
-    </div>
-
-    <div>
-      <h2 class="text-xl font-bold mb-2 text-purple-700">⚙️ Participantes</h2>
-      <input id="newName" class="border rounded p-2 w-full mb-2" placeholder="Agregar nombre" />
-      <button id="addName" class="w-full bg-purple-700 text-white py-2 rounded">Agregar</button>
     </div>
 
   </div>
@@ -70,98 +108,48 @@
 <audio id="winSound" preload="auto" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
 
 <script>
-/* =========================
-   SEGURIDAD PERMISSIONS FIX
-   ========================= */
 function safePlay(audio){
-  try{
-    const p = audio.play();
-    if(p!==undefined){ p.catch(()=>{}); }
-  }catch(e){}
+  try{ const p=audio.play(); if(p) p.catch(()=>{});}catch{}
 }
 
 async function safeFullscreen(){
   try{
-    if(!document.fullscreenElement){
+    if(!document.fullscreenElement)
       await document.documentElement.requestFullscreen();
-    }else{
+    else
       await document.exitFullscreen();
-    }
-  }catch(e){
-    alert("Pantalla completa bloqueada por el navegador. Ábrelo fuera del visor o permite fullscreen.");
-  }
+  }catch{}
 }
 
-/* ========================= */
-
-let names = JSON.parse(localStorage.getItem("names")) || [];
-if(names.length===0){
- names=[
-"Diana Carola Zuluaga",
-"Andrea Rincón",
-"Estefany Arias",
-"Alejandro",
-"Yeny",
-"Tatiana Álvarez",
-"Dayana Acevedo",
-"Estefanía Álvarez",
-"Juan Andrés Alzate",
-"Ana María Pineda",
-"Silvana Monsalve",
-"Yeny Cadavid",
-"Hugo Gómez",
-"David Alcaraz",
-"Martha Muñoz",
-"Daniela Jaramillo",
-"Yuliana Ortiz",
-"Johana Vargas",
-"Daissy Rojas",
-"Lorena Barrientos",
-"Olga Muñoz",
-"Darío Gómez",
-"Sebastián Benjumea",
-"Milena Builes",
-"Maribel Tabares",
-"Sara Jaramillo",
-"Mónica Benítez",
-"Isabel Pacheco",
-"Nayibi Sánchez",
-"Carlos Acevedo",
-"Leidy Sánchez",
-"Marcela Rojas",
-"Lucy Acevedo",
-"Ángela Ospina",
-"Yised Guevara",
-"Carlos Posso",
-"María Isabel Herrera",
-"Roger López",
-"Beatriz Correa",
-"María Victoria Rendón",
-"Luz Adriana Urrego",
-"Alexander Escobar"
- ];
+function showWinnerOverlay(name){
+  document.getElementById("winnerBig").textContent=name;
+  const overlay=document.getElementById("winnerOverlay");
+  overlay.style.display="flex";
+  safeFullscreen();
 }
+
+function hideWinnerOverlay(){
+  document.getElementById("winnerOverlay").style.display="none";
+}
+
+let names = JSON.parse(localStorage.getItem("names")) || [
+"Diana Carola Zuluaga","Andrea Rincón","Estefany Arias","Alejandro","Yeny","Tatiana Álvarez","Dayana Acevedo","Estefanía Álvarez","Juan Andrés Alzate","Ana María Pineda","Silvana Monsalve","Yeny Cadavid","Hugo Gómez","David Alcaraz","Martha Muñoz","Daniela Jaramillo","Yuliana Ortiz","Johana Vargas","Daissy Rojas","Lorena Barrientos","Olga Muñoz","Darío Gómez","Sebastián Benjumea","Milena Builes","Maribel Tabares","Sara Jaramillo","Mónica Benítez","Isabel Pacheco","Nayibi Sánchez","Carlos Acevedo","Leidy Sánchez","Marcela Rojas","Lucy Acevedo","Ángela Ospina","Yised Guevara","Carlos Posso","María Isabel Herrera","Roger López","Beatriz Correa","María Victoria Rendón","Luz Adriana Urrego","Alexander Escobar"
+];
 
 let winners = JSON.parse(localStorage.getItem("winners")) || [];
-let stats = JSON.parse(localStorage.getItem("stats")) || {};
 
 const canvas=document.getElementById("wheel");
 const ctx=canvas.getContext("2d");
 const historyList=document.getElementById("history");
-const statsList=document.getElementById("stats");
 const notes=document.getElementById("notes");
 const spinSound=document.getElementById("spinSound");
 const winSound=document.getElementById("winSound");
-
-notes.value=localStorage.getItem("notes")||"";
-notes.oninput=()=>localStorage.setItem("notes",notes.value);
 
 let angle=0,spinning=false;
 
 function save(){
  localStorage.setItem("names",JSON.stringify(names));
  localStorage.setItem("winners",JSON.stringify(winners));
- localStorage.setItem("stats",JSON.stringify(stats));
 }
 
 function drawWheel(){
@@ -190,91 +178,69 @@ function spinWheel(){
  safePlay(spinSound);
 
  const start=performance.now();
- const duration=4000;
- const extra=Math.random()*10+10;
+ const duration=5000;
+ const spins=Math.random()*6+8;
+ const initialAngle=angle;
+
+ function easeOut(x){return 1-Math.pow(1-x,3);} 
 
  function anim(t){
-   const p=(t-start)/duration;
-   if(p<1){
-     angle+=0.3*(1-p);
-     drawWheel();
-     requestAnimationFrame(anim);
-   }else{
-     angle+=extra;
-     drawWheel();
-     selectWinner();
-     spinning=false;
-   }
+   const progress=Math.min((t-start)/duration,1);
+   angle=initialAngle+spins*2*Math.PI*easeOut(progress);
+   drawWheel();
+   if(progress<1) requestAnimationFrame(anim);
+   else{selectWinner();spinning=false;}
  }
  requestAnimationFrame(anim);
 }
 
 function selectWinner(){
  const arc=(2*Math.PI)/names.length;
- const index=Math.floor((names.length-(angle%(2*Math.PI))/arc))%names.length;
+ const rotation=angle%(2*Math.PI);
+ const index=Math.floor((2*Math.PI-rotation)/arc)%names.length;
  const winner=names[index];
 
  document.getElementById("winner").textContent=`🏆 Ganador: ${winner}`;
+ showWinnerOverlay(winner);
+
  safePlay(winSound);
- confetti({particleCount:160,spread:90});
+ confetti({particleCount:200,spread:100});
 
- winners.unshift(`${new Date().toLocaleString()} — ${winner}`);
- stats[winner]=(stats[winner]||0)+1;
+ winners.unshift({
+   date:new Date().toLocaleString(),
+   name:winner,
+   notes:notes.value.trim()
+ });
 
- if(document.getElementById("noRepeat").checked){
+ if(document.getElementById("noRepeat").checked)
    names.splice(index,1);
- }
 
+ notes.value="";
  save();
  renderHistory();
- renderStats();
 }
 
 function renderHistory(){
  historyList.innerHTML="";
  winners.forEach(w=>{
    const li=document.createElement("li");
-   li.textContent=w;
+   li.className="mb-2 border-b pb-2";
+   li.innerHTML=`<strong>${w.name}</strong><br><small>${w.date}</small>${w.notes?`<br>📝 ${w.notes}`:""}`;
    historyList.appendChild(li);
  });
 }
 
-function renderStats(){
- statsList.innerHTML="";
- Object.entries(stats).sort((a,b)=>b[1]-a[1]).forEach(([n,c])=>{
-   const li=document.createElement("li");
-   li.textContent=`${n}: ${c} veces`;
-   statsList.appendChild(li);
- });
-}
-
-// botones
 document.getElementById("spinBtn").onclick=spinWheel;
 
 document.getElementById("resetBtn").onclick=()=>{
- winners=[]; stats={}; save(); renderHistory(); renderStats();
-};
-
-document.getElementById("addName").onclick=()=>{
- const v=document.getElementById("newName").value.trim();
- if(v){ names.push(v); save(); drawWheel(); document.getElementById("newName").value=""; }
+ winners=[]; save(); renderHistory();
 };
 
 document.getElementById("fullscreenBtn").onclick=safeFullscreen;
 
-let dark=false;
-document.getElementById("themeBtn").onclick=()=>{
- dark=!dark;
- document.getElementById("body").className = dark
-  ? "bg-purple-900 text-white min-h-screen"
-  : "bg-gradient-to-br from-purple-700 via-purple-600 to-white min-h-screen";
-};
-
 renderHistory();
-renderStats();
 drawWheel();
 </script>
 
 </body>
 </html>
-
