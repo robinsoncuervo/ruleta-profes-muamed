@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RULETA PROFES MUAMED</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+  <style>
+    canvas { background:#ffffff; border-radius:50%; }
+  </style>
+</head>
+<body id="body" class="bg-gradient-to-br from-purple-700 via-purple-600 to-white min-h-screen text-gray-800 transition-all">
+
+<!-- ENCABEZADO -->
+<div class="text-center pt-6">
+  <!-- IMPORTANTE: usa archivo local logo.png si el navegador bloquea base64 -->
+  <img src="logo.png" onerror="this.style.display='none'" class="mx-auto w-40 mb-3" />
+  <h1 class="text-4xl font-extrabold text-purple-800">🎡 RULETA PROFES MUAMED</h1>
+</div>
+
+<div class="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+  <!-- RUEDA -->
+  <div class="lg:col-span-2 bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center">
+    <canvas id="wheel" width="450" height="450"></canvas>
+
+    <div class="flex gap-3 mt-6 flex-wrap justify-center">
+      <button id="spinBtn" class="px-6 py-3 bg-purple-700 text-white rounded-xl text-lg hover:bg-purple-800">Girar Ruleta</button>
+      <button id="resetBtn" class="px-4 py-3 bg-gray-600 text-white rounded-xl">Reiniciar Histórico</button>
+      <button id="fullscreenBtn" class="px-4 py-3 bg-purple-500 text-white rounded-xl">Pantalla Completa</button>
+      <button id="themeBtn" class="px-4 py-3 bg-white border border-purple-700 text-purple-700 rounded-xl">Cambiar Tema</button>
+    </div>
+
+    <label class="mt-4 flex items-center gap-2">
+      <input type="checkbox" id="noRepeat" /> Evitar repetir ganadores
+    </label>
+
+    <h2 id="winner" class="text-2xl font-semibold mt-4 text-purple-800"></h2>
+  </div>
+
+  <!-- PANEL -->
+  <div class="bg-white rounded-2xl shadow-xl p-6 flex flex-col gap-6">
+
+    <div>
+      <h2 class="text-xl font-bold mb-2 text-purple-700">🏆 Histórico</h2>
+      <ul id="history" class="max-h-40 overflow-y-auto border rounded p-2 text-sm"></ul>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold mb-2 text-purple-700">📊 Estadísticas</h2>
+      <ul id="stats" class="text-sm"></ul>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold mb-2 text-purple-700">📝 Notas</h2>
+      <textarea id="notes" class="w-full h-32 border rounded p-2"></textarea>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold mb-2 text-purple-700">⚙️ Participantes</h2>
+      <input id="newName" class="border rounded p-2 w-full mb-2" placeholder="Agregar nombre" />
+      <button id="addName" class="w-full bg-purple-700 text-white py-2 rounded">Agregar</button>
+    </div>
+
+  </div>
+</div>
+
+<audio id="spinSound" preload="auto" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
+<audio id="winSound" preload="auto" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+
+<script>
+/* =========================
+   SEGURIDAD PERMISSIONS FIX
+   ========================= */
+function safePlay(audio){
+  try{
+    const p = audio.play();
+    if(p!==undefined){ p.catch(()=>{}); }
+  }catch(e){}
+}
+
+async function safeFullscreen(){
+  try{
+    if(!document.fullscreenElement){
+      await document.documentElement.requestFullscreen();
+    }else{
+      await document.exitFullscreen();
+    }
+  }catch(e){
+    alert("Pantalla completa bloqueada por el navegador. Ábrelo fuera del visor o permite fullscreen.");
+  }
+}
+
+/* ========================= */
+
+let names = JSON.parse(localStorage.getItem("names")) || [];
+if(names.length===0){
+ names=[
+"Diana Carola Zuluaga",
+"Andrea Rincón",
+"Estefany Arias",
+"Alejandro",
+"Yeny",
+"Tatiana Álvarez",
+"Dayana Acevedo",
+"Estefanía Álvarez",
+"Juan Andrés Alzate",
+"Ana María Pineda",
+"Silvana Monsalve",
+"Yeny Cadavid",
+"Hugo Gómez",
+"David Alcaraz",
+"Martha Muñoz",
+"Daniela Jaramillo",
+"Yuliana Ortiz",
+"Johana Vargas",
+"Daissy Rojas",
+"Lorena Barrientos",
+"Olga Muñoz",
+"Darío Gómez",
+"Sebastián Benjumea",
+"Milena Builes",
+"Maribel Tabares",
+"Sara Jaramillo",
+"Mónica Benítez",
+"Isabel Pacheco",
+"Nayibi Sánchez",
+"Carlos Acevedo",
+"Leidy Sánchez",
+"Marcela Rojas",
+"Lucy Acevedo",
+"Ángela Ospina",
+"Yised Guevara",
+"Carlos Posso",
+"María Isabel Herrera",
+"Roger López",
+"Beatriz Correa",
+"María Victoria Rendón",
+"Luz Adriana Urrego",
+"Alexander Escobar"
+ ];
+}
+
+let winners = JSON.parse(localStorage.getItem("winners")) || [];
+let stats = JSON.parse(localStorage.getItem("stats")) || {};
+
+const canvas=document.getElementById("wheel");
+const ctx=canvas.getContext("2d");
+const historyList=document.getElementById("history");
+const statsList=document.getElementById("stats");
+const notes=document.getElementById("notes");
+const spinSound=document.getElementById("spinSound");
+const winSound=document.getElementById("winSound");
+
+notes.value=localStorage.getItem("notes")||"";
+notes.oninput=()=>localStorage.setItem("notes",notes.value);
+
+let angle=0,spinning=false;
+
+function save(){
+ localStorage.setItem("names",JSON.stringify(names));
+ localStorage.setItem("winners",JSON.stringify(winners));
+ localStorage.setItem("stats",JSON.stringify(stats));
+}
+
+function drawWheel(){
+ const arc=(2*Math.PI)/names.length;
+ ctx.clearRect(0,0,450,450);
+ names.forEach((n,i)=>{
+   const start=angle+i*arc;
+   ctx.beginPath();
+   ctx.fillStyle=`hsl(${i*360/names.length},60%,65%)`;
+   ctx.moveTo(225,225);
+   ctx.arc(225,225,225,start,start+arc);
+   ctx.fill();
+   ctx.save();
+   ctx.translate(225,225);
+   ctx.rotate(start+arc/2);
+   ctx.fillStyle="#000";
+   ctx.font="12px Arial";
+   ctx.fillText(n,120,5);
+   ctx.restore();
+ });
+}
+
+function spinWheel(){
+ if(spinning||names.length===0) return;
+ spinning=true;
+ safePlay(spinSound);
+
+ const start=performance.now();
+ const duration=4000;
+ const extra=Math.random()*10+10;
+
+ function anim(t){
+   const p=(t-start)/duration;
+   if(p<1){
+     angle+=0.3*(1-p);
+     drawWheel();
+     requestAnimationFrame(anim);
+   }else{
+     angle+=extra;
+     drawWheel();
+     selectWinner();
+     spinning=false;
+   }
+ }
+ requestAnimationFrame(anim);
+}
+
+function selectWinner(){
+ const arc=(2*Math.PI)/names.length;
+ const index=Math.floor((names.length-(angle%(2*Math.PI))/arc))%names.length;
+ const winner=names[index];
+
+ document.getElementById("winner").textContent=`🏆 Ganador: ${winner}`;
+ safePlay(winSound);
+ confetti({particleCount:160,spread:90});
+
+ winners.unshift(`${new Date().toLocaleString()} — ${winner}`);
+ stats[winner]=(stats[winner]||0)+1;
+
+ if(document.getElementById("noRepeat").checked){
+   names.splice(index,1);
+ }
+
+ save();
+ renderHistory();
+ renderStats();
+}
+
+function renderHistory(){
+ historyList.innerHTML="";
+ winners.forEach(w=>{
+   const li=document.createElement("li");
+   li.textContent=w;
+   historyList.appendChild(li);
+ });
+}
+
+function renderStats(){
+ statsList.innerHTML="";
+ Object.entries(stats).sort((a,b)=>b[1]-a[1]).forEach(([n,c])=>{
+   const li=document.createElement("li");
+   li.textContent=`${n}: ${c} veces`;
+   statsList.appendChild(li);
+ });
+}
+
+// botones
+document.getElementById("spinBtn").onclick=spinWheel;
+
+document.getElementById("resetBtn").onclick=()=>{
+ winners=[]; stats={}; save(); renderHistory(); renderStats();
+};
+
+document.getElementById("addName").onclick=()=>{
+ const v=document.getElementById("newName").value.trim();
+ if(v){ names.push(v); save(); drawWheel(); document.getElementById("newName").value=""; }
+};
+
+document.getElementById("fullscreenBtn").onclick=safeFullscreen;
+
+let dark=false;
+document.getElementById("themeBtn").onclick=()=>{
+ dark=!dark;
+ document.getElementById("body").className = dark
+  ? "bg-purple-900 text-white min-h-screen"
+  : "bg-gradient-to-br from-purple-700 via-purple-600 to-white min-h-screen";
+};
+
+renderHistory();
+renderStats();
+drawWheel();
+</script>
+
+</body>
+</html>
+
